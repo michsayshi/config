@@ -87,6 +87,17 @@ augroup END
 
 " Plugin config {{{
 
+"" Coc
+" Use `[g` and `]g` to navigate diagnostics
+nmap <silent> [g <Plug>(coc-diagnostic-prev)
+nmap <silent> ]g <Plug>(coc-diagnostic-next)
+
+" GoTo code navigation.
+nmap <silent> gd <Plug>(coc-definition)
+nmap <silent> gy <Plug>(coc-type-definition)
+nmap <silent> gi <Plug>(coc-implementation)
+nmap <silent> gr <Plug>(coc-references)
+
 "" Go
 " general
 let g:go_fmt_command = "goimports"
@@ -104,6 +115,11 @@ let g:go_highlight_generate_tags = 1
 let g:rustfmt_autosave = 1
 let g:rustfmt_emit_files = 1
 let g:rustfmt_fail_silently = 0
+" Follow Rust code style rules
+au Filetype rust set colorcolumn=100
+au Filetype rust set shiftwidth=4
+au Filetype rust set softtabstop=4
+au Filetype rust set tabstop=4
 " }}}
 
 " Key Mapping {{{
@@ -131,6 +147,7 @@ inoremap <silent><expr> <TAB>
       \ pumvisible() ? "\<C-n>" :
       \ <SID>check_back_space() ? "\<TAB>" :
       \ coc#refresh()
+inoremap <expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
 
 function! s:check_back_space() abort
   let col = col('.') - 1
