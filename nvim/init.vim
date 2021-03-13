@@ -2,14 +2,12 @@
 call plug#begin('~/.config/nvim/plugged')
 
 " Languages
-" Plug 'fatih/vim-go', { 'do': ':GoUpdateBinaries' }
- Plug 'sheerun/vim-polyglot'
- Plug 'rust-lang/rust.vim'
+Plug 'sheerun/vim-polyglot'
+Plug 'rust-lang/rust.vim'
 
 
 " General
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
-" Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
 Plug 'vim-airline/vim-airline'
 Plug 'scrooloose/nerdtree'
 Plug 'justinmk/vim-sneak'
@@ -123,21 +121,3 @@ nmap <Tab> :wincmd w<return>
 nmap <S-Tab> :wincmd W<return>
 nmap <F2> :NERDTreeToggle<return>
 " }}}
-
-" deoplete {{{
-" let g:deoplete#enable_at_startup = 1 
-" " Use smartcase.
-" call deoplete#custom#option('smart_case', v:true)
-
-" <CR>: close popup and save indent.
-" inoremap <silent> <CR> <C-r>=<SID>my_cr_function()<CR>
-" function! s:my_cr_function()
-"   return (pumvisible() ? "\<C-y>" : "" ) . "\<CR>"
-"   " For no inserting <CR> key.
-"   "return pumvisible() ? "\<C-y>" : "\<CR>"
-" endfunction
-" <TAB>: completion.
-" inoremap <expr><TAB>  pumvisible() ? "\<C-n>" : "\<TAB>"
-" " <C-h>, <BS>: close popup and delete backword char.
-" inoremap <expr><C-h> deoplete#smart_close_popup()."\<C-h>"
-" inoremap <expr><BS> deoplete#smart_close_popup()."\<C-h>"
