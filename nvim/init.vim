@@ -4,7 +4,7 @@ call plug#begin('~/.config/nvim/plugged')
 " Languages
 Plug 'sheerun/vim-polyglot'
 Plug 'rust-lang/rust.vim'
-
+Plug 'lervag/vimtex'
 
 " General
 Plug 'neoclide/coc.nvim', {'branch': 'release'}
