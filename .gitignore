@@ -1,0 +1,33 @@
+# Compiled
+*.elc
+
+# Packaging
+.cask
+
+# Backup files
+*~
+
+# Undo-tree save-files
+*.~undo-tree
+
+# emacs caches
+emacs/ido.last
+emacs/org-clock-save.el
+emacs/ac-comphist.dat
+emacs/recentf
+emacs/smex-items
+emacs/places
+emacs/auto-save-list/*
+emacs/transient/*
+emacs/elpa/*
+emacs/elpy/*
+emacs/eshell/*
+
+# vim addon cache
+nvim/plugged/*
+
+# coc
+coc/*
+!coc/extensions
+coc/extensions/*
+!coc/extensions/package.json

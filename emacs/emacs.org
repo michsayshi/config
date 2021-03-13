@@ -1,0 +1,2034 @@
+#+TITLE: Emacs Configuration
+
+* Usage
+
+** Installation
+
+- Install GNU Emacs 24 or later
+- Place =init.el= and =emacs.org= in =~/.emacs.d/=
+- Launch Emacs
+
+** Commentary
+
+Any variables, functions, or macros defined in this configuration
+are "namespaced" with a prefix of ~my-~. This is only a convention
+for easily distinguishing between built-in functions and those
+defined in this configuration or another package, and has no other
+special significance.
+
+** Configuring Packages
+
+We use [[https://github.com/jwiegley/use-package][use-package]] to autoload packages. It provides a DSL for
+setting up autoloads and keybindings, and for deferring the loading
+of packages that might otherwise slow down Emacs's startup.
+
+#+NAME: init-before
+#+BEGIN_SRC emacs-lisp :tangle yes
+(add-to-list 'package-archives '("melpa-stable" . "https://stable.melpa.org/packages/") t)
+(add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
+(add-to-list 'package-archives '("org" . "https://orgmode.org/elpa/") t)
+
+(unless (package-installed-p 'use-package)
+  (package-refresh-contents)
+  (package-install 'use-package))
+
+(eval-when-compile
+  (require 'use-package))
+#+END_SRC
+* Emacs Initialization
+
+** Paths
+
+Keep any Elisp files not installed from a package repository in the
+=vendor/= directory:
+
+#+NAME: init-before
+#+BEGIN_SRC emacs-lisp :tangle yes
+(defvar my-vendor-directory (concat user-emacs-directory "vendor/"))
+(add-to-list 'load-path my-vendor-directory)
+#+END_SRC
+
+Keep theme files in the =themes/= directory:
+
+#+NAME: init-before
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq custom-theme-directory (concat user-emacs-directory "themes/"))
+#+END_SRC
+** Platform-specific
+
+There are a few settings that are only relevant to OS X (Darwin):
+
+#+NAME: init-before
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (cond ((eq system-type 'darwin)
+         (setq delete-by-moving-to-trash t
+               trash-directory "~/.Trash/")
+         ;; BSD ls does not support --dired. Use GNU core-utils: brew install coreutils
+         (when (executable-find "gls")
+           (setq insert-directory-program "gls"))
+         ;; Point Org to LibreOffice executable
+         (when (file-exists-p "/Applications/LibreOffice.app/Contents/MacOS/soffice")
+           (setq org-export-odt-convert-processes '(("LibreOffice" "/Applications/LibreOffice.app/Contents/MacOS/soffice --headless --convert-to %f%x --outdir %d %i"))))))
+#+END_SRC
+
+Derive PATH by running a shell so that GUI Emacs sessions have access to it.
+
+#+NAME: init-before
+#+BEGIN_SRC emacs-lisp :tangle yes
+(use-package exec-path-from-shell
+  :ensure t
+  :if (memq window-system '(mac ns))
+  :config
+  (exec-path-from-shell-initialize))
+#+END_SRC
+** Start Server
+
+The Emacs server allows for using =emacsclient= to quickly pop open a
+new frame in a terminal:
+
+#+NAME: init-after
+#+BEGIN_SRC emacs-lisp :tangle no
+  (use-package server
+    :if window-system
+    :config
+    (unless (server-running-p)
+      (server-start)))
+#+END_SRC
+
+Here are the most common ways in which =emacsclient= is used:
+
+| Command                         | Description                     |
+|---------------------------------+---------------------------------|
+| =emacsclient=                     | Edit in existing frame          |
+| =emacsclient -n (--no-wait)=      | Do not wait--return immediately |
+| =emacsclient -c (--create-frame)= | Edit in a new frame             |
+| =emacsclient -t (--tty)=          | Edit in a new terminal frame    |
+| =emacsclient -e (--eval)=         | Evaluate the following Elisp    |
+
+For more, see =man emacsclient=.
+** Temporary Files
+
+Autosave and backup files (currently disabled) go in =/tmp/=.
+
+#+NAME: init-after
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq backup-directory-alist
+        `((".*" . ,temporary-file-directory)))
+  (setq auto-save-file-name-transforms
+        `((".*" ,temporary-file-directory t)))
+  (setq-default make-backup-files nil)
+#+END_SRC
+** Private
+
+Since this configuration is kept in version control in public view,
+we keep sensitive information such as passwords in a separate
+file. Anything with the special prefix ~my-private-~ originates from
+this file.
+
+#+NAME: init-before
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (defvar my-private-file (expand-file-name "private.el" user-emacs-directory))
+  (load my-private-file 'noerror)
+#+END_SRC
+** Custom
+
+Set alternative location for =custom-set-variables= and =custom-set-faces=:
+
+#+NAME: init-after
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq custom-file (expand-file-name "custom.el" user-emacs-directory))
+  (load custom-file 'noerror)
+#+END_SRC
+* Appearance
+
+** Icon
+
+The icon that comes with Emacs for OS X does not meet the standards
+of design set by Apple's GUI. We use this icon from the [[https://github.com/numixproject/numix-icon-theme-circle][Numix
+Circle icon set]] instead:
+
+[[file:emacs.svg]]
+
+This SVG can be converted into an ICNS file [[http://iconverticons.com/online/][here]].
+
+** Mode-line
+
+The mode-line displays information about the visible buffer at the
+bottom of the window. This defines a custom mode line format:
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package powerline
+	:ensure t
+    :config
+    (progn
+      (setq-default powerline-default-separator
+                    (if (display-graphic-p) 'wave 'utf-8))
+      (powerline-default-theme)))
+#+END_SRC
+
+** UI
+
+Hide parts of the GUI that we don't need, namely the graphical tool
+bar and any scroll bars.
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (if (fboundp 'tool-bar-mode) (tool-bar-mode -1))
+  (if (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))
+#+END_SRC
+
+Load the theme, which determines colors and font variants. Enox is
+a medium-contrast theme with a dark background.
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (load-theme 'enox t)
+#+END_SRC
+
+When loading a different theme, first unload the previous theme
+so that it doesn't leave stray customizations behind.
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (defadvice load-theme (before theme-dont-propagate activate)
+   (mapc #'disable-theme custom-enabled-themes))
+#+END_SRC
+
+We also set the font while specifying a couple fallbacks. The last
+argument of ~set-frame-font~ ensures that new frames inherit the font
+as well.
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (cond
+   ((find-font (font-spec :name "Fira Mono"))
+    (set-frame-font "Fira Mono-14" t t)
+    (setq-default line-spacing 4))
+   ((find-font (font-spec :name "Source Code Pro"))
+    (set-frame-font "Source Code Pro-14" t t))
+   ((find-font (font-spec :name "Panic Sans"))
+    (set-frame-font "Panic Sans-14" t t))
+   ((find-font (font-spec :name "courier"))
+    (set-frame-font "courier-14" t t)))
+#+END_SRC
+
+Highlight the current line.
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (global-hl-line-mode)
+#+END_SRC
+
+GUI Emacs windows default to a tiny size. Usually, I want the
+window to fill the screen:
+
+#+BEGIN_QUOTE
+  The developer build of Emacs Trunk has a function called
+  ~toggle-frame-maximized~, which is included within
+  =.../lisp/frame.el=. That function can be added to the
+  ~after-init-hook~ or ~emacs-startup-hook~, or simply included in the
+  =.emacs= file that gets loaded on startup. On OSX, it increases
+  both width and height in one-fell-swoop.
+#+END_QUOTE
+
+Suppress the theme's background color and Emacs's menu bar in
+terminal frames:
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle no
+  (defun my-after-make-frame (frame)
+    "Function run in after-make-frame-functions hook, which handles
+  cosmetic issues in terminal frames."
+    (unless (display-graphic-p frame)
+      (if (fboundp 'menu-bar-mode) (menu-bar-mode -1))
+      (set-face-background 'default "dummy-color" frame)))
+
+  (add-hook 'after-make-frame-functions 'my-after-make-frame)
+#+END_SRC
+
+Emacs typically beeps to indicate illegal commands. I don't find
+this particularly useful, so we disable it.
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq ring-bell-function 'ignore)
+#+END_SRC
+
+Emacs shows an unwelcome "startup screen" upon launch. Here we
+disable it.
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq inhibit-startup-screen t)
+#+END_SRC
+
+Set the initial text contents of the =*scratch*= buffer. A value of ~nil~
+suppresses the message altogether.
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq initial-scratch-message nil)
+#+END_SRC
+
+Use ANSI color in shell:
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (add-hook 'shell-mode-hook 'ansi-color-for-comint-mode-on)
+#+END_SRC
+
+Never require full word answers to yes/no prompts:
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (defalias 'yes-or-no-p 'y-or-n-p)
+#+END_SRC
+
+** Popwin
+
+[[https://github.com/m2ym/popwin-el][Popwin]] forces certain buffers into a temporary window with fixed
+height that spans the entire width of the frame.
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package popwin
+    :ensure t
+    :commands popwin-mode
+    :defer 2
+    :config
+    (progn
+      (popwin-mode 1)
+      (push '("*Org Agenda*" :width 82 :position right :dedicated t :stick t) popwin:special-display-config)
+      (push '("*helm*" :height 20) popwin:special-display-config)
+      (push '("^\*helm .+\*$" :regexp t :height 20) popwin:special-display-config)
+      (push '("*Compile-Log*" :height 20 :noselect t) popwin:special-display-config)))
+#+END_SRC
+
+** Delimiters
+
+The rainbow-delimiters package differentiates levels of nested
+parentheses by color. This is mostly useful for visually parsing
+Lisp's parenthesis-heavy syntax.
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package rainbow-delimiters
+    :ensure t
+    :commands rainbow-delimiters-mode
+    :init
+    (add-hook 'emacs-lisp-mode-hook 'rainbow-delimiters-mode))
+#+END_SRC
+
+Highlight matching parenthesis, brace, etc.
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (show-paren-mode t)
+#+END_SRC
+
+** Color Names and Codes
+
+Rainbow mode displays textual color representations with a
+corresponding colored background.
+
+#+NAME: appearance
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package rainbow-mode
+    :ensure t
+    :commands rainbow-turn-on
+    :init
+    (add-hook 'prog-mode-hook 'rainbow-turn-on)
+    :config
+    (setq rainbow-x-colors nil))
+#+END_SRC
+* Key Bindings
+
+** General
+
+Instantly display current key sequence in mini buffer:
+
+#+NAME: evil
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq echo-keystrokes 0.02)
+#+END_SRC
+
+When opening a new line with =RET=, indent it appropriately:
+
+#+NAME: evil
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (global-set-key (kbd "RET") 'newline-and-indent)
+#+END_SRC
+
+** Evil
+
+Evil mode is a minor mode providing Vim emulation for Emacs. It
+reproduces Vim's modal editing and even certain Ex commands.
+
+Evil Leader mode provides something like Vim's =<Leader>=, which is
+set to =SPC= below. Here are the conventions used throughout the
+configuration around "namespacing" sets of commands bound to the
+leader key:
+
+| Key | Description                 |
+|-----+-----------------------------|
+| =g=   | Git functions (via Magit)   |
+| =o=   | Option (minor-mode) toggles |
+| =r=   | Global Org mode functions   |
+
+(Evil Leader mode has to be initialized before Evil mode to work
+around [[https://github.com/cofi/evil-leader/issues/10][a limitation]].)
+
+#+NAME: evil
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package evil
+    :ensure t
+    :init
+    (progn
+      (setq evil-want-C-w-in-emacs-state t)
+      (use-package evil-leader
+        :ensure t
+        :config
+        (progn
+          (evil-leader/set-leader "<SPC>")
+          (global-evil-leader-mode 1)
+
+          (defun my-declare-prefix (prefix name)
+            "Declare a prefix PREFIX. PREFIX is a string describing
+  a key sequence. NAME is a symbol name used as the prefix command."
+            (let ((command (intern (concat "group:" name))))
+              ;; Define the prefix command only if it does not already exist
+              (unless (lookup-key evil-leader--default-map prefix)
+                (define-prefix-command command)
+                (evil-leader/set-key prefix command))))
+
+          ;; Define prefix commands for the sake of guide-key
+          (setq my-key-binding-prefixes '(("g" . "git")
+                                           ("m" . "mode")
+                                           ("o" . "toggle")
+                                           ("r" . "org")))
+
+          (mapc (lambda (x) (my-declare-prefix (car x) (cdr x)))
+                my-key-binding-prefixes)
+
+          (evil-leader/set-key
+            "SPC" 'smex
+            "m SPC" 'smex-major-mode-commands
+            "=" 'my-indent-buffer
+            "b" 'ido-switch-buffer
+            "B" 'ibuffer
+            "d" 'projectile-find-dir
+            "D" 'dired
+            "e" 'ido-find-file
+            "f" 'projectile-find-file
+            "k" 'kill-this-buffer
+            "K" 'dash-at-point
+            "p" 'projectile-switch-project
+            "P" 'paradox-list-packages
+            "s" 'ansi-term
+            "T" 'my-write-timestamped-current-file-copy
+            "u" 'undo-tree-visualize
+            "w" 'whitespace-cleanup
+            "y" 'my-yank-buffer
+            "z" 'my-narrow-or-widen
+            ;; Option toggle
+            "o l" 'whitespace-mode
+            "o n" 'linum-mode
+            "o q" 'auto-fill-mode
+            "o w" 'visual-line-mode)))
+
+      (use-package evil-numbers
+        :ensure t
+        :config
+        (progn
+          (define-key evil-normal-state-map "+" 'evil-numbers/inc-at-pt)
+          (define-key evil-normal-state-map "_" 'evil-numbers/dec-at-pt))))
+    :config
+    (progn
+      (setq evil-default-cursor '("DodgerBlue1" box)
+            evil-normal-state-cursor '("orange" box)
+            evil-emacs-state-cursor '("pink" box)
+            evil-motion-state-cursor '("SeaGreen1" box)
+            evil-insert-state-cursor '("orange" bar)
+            evil-visual-state-cursor '("orange" hbar)
+            evil-replace-state-cursor '("orange" hbar))
+
+      (evil-mode 1)
+
+      ;; Override the starting state in a few major modes
+      (evil-set-initial-state 'magit-mode 'emacs)
+      (evil-set-initial-state 'org-agenda-mode 'emacs)
+      (evil-set-initial-state 'package-menu-mode 'motion)
+      (evil-set-initial-state 'paradox-menu-mode 'motion)
+      (evil-set-initial-state 'mu4e-main-mode 'motion)
+      (evil-set-initial-state 'mu4e-view-mode 'motion)
+      (evil-set-initial-state 'mu4e-headers-mode 'motion)
+      (evil-set-initial-state 'elfeed-search-mode 'motion)
+      (evil-set-initial-state 'elfeed-show-mode 'motion)
+
+      ;; Reclaim useful keys from evil-motion-state-map
+      (define-key evil-motion-state-map (kbd "RET") nil)
+      (define-key evil-motion-state-map (kbd "TAB") nil)
+
+      (define-key minibuffer-local-map (kbd "C-w") 'backward-kill-word)
+
+      (define-key evil-motion-state-map "j" 'evil-next-visual-line)
+      (define-key evil-motion-state-map "k" 'evil-previous-visual-line)
+      (define-key evil-normal-state-map "Y" (kbd "y$"))
+
+      ;; Experimental alternative to C-d, C-u
+      (define-key evil-normal-state-map (kbd "C-k") 'evil-scroll-up)
+      (define-key evil-normal-state-map (kbd "C-j") 'evil-scroll-down)
+      (define-key evil-motion-state-map (kbd "C-k") 'evil-scroll-up)
+      (define-key evil-motion-state-map (kbd "C-j") 'evil-scroll-down)
+
+      ;; Commentary.vim
+      (use-package evil-operator-comment
+        :config
+        (global-evil-operator-comment-mode 1))
+
+      ;; Vinegar.vim
+      (autoload 'dired-jump "dired-x"
+        "Jump to Dired buffer corresponding to current buffer." t)
+      (define-key evil-normal-state-map "-" 'dired-jump)
+      (evil-define-key 'normal dired-mode-map "-" 'dired-up-directory)
+
+      ;; Unimpaired.vim
+      (define-key evil-normal-state-map (kbd "[ SPC")
+        (lambda () (interactive) (evil-insert-newline-above) (forward-line)))
+      (define-key evil-normal-state-map (kbd "] SPC")
+        (lambda () (interactive) (evil-insert-newline-below) (forward-line -1)))
+      (define-key evil-normal-state-map (kbd "[ e") (kbd "ddkP"))
+      (define-key evil-normal-state-map (kbd "] e") (kbd "ddp"))
+      (define-key evil-normal-state-map (kbd "[ b") 'previous-buffer)
+      (define-key evil-normal-state-map (kbd "] b") 'next-buffer)))
+#+END_SRC
+
+Additionally, let's make =ESC= work more or less like it does in
+Vim. Use =ESC= to cancel out of the minibuffer:
+
+#+NAME: evil
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (defun my-minibuffer-keyboard-quit ()
+    "Abort recursive edit.
+
+  In Delete Selection mode, if the mark is active, just deactivate it;
+  then it takes a second \\[keyboard-quit] to abort the minibuffer."
+    (interactive)
+    (if (and delete-selection-mode transient-mark-mode mark-active)
+        (setq deactivate-mark t)
+      (when (get-buffer "*Completions*") (delete-windows-on "*Completions*"))
+      (abort-recursive-edit)))
+
+  (define-key minibuffer-local-map [escape] 'my-minibuffer-keyboard-quit)
+  (define-key minibuffer-local-ns-map [escape] 'my-minibuffer-keyboard-quit)
+  (define-key minibuffer-local-completion-map [escape] 'my-minibuffer-keyboard-quit)
+  (define-key minibuffer-local-must-match-map [escape] 'my-minibuffer-keyboard-quit)
+  (define-key minibuffer-local-isearch-map [escape] 'my-minibuffer-keyboard-quit)
+#+END_SRC
+* Editing
+
+** Text Encodings
+
+Use UTF-8 encoding wherever possible:
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (set-default-coding-systems 'utf-8-unix)
+  (set-terminal-coding-system 'utf-8-unix)
+  (set-keyboard-coding-system 'utf-8-unix)
+  (prefer-coding-system 'utf-8-unix)
+#+END_SRC
+
+Even so, ~ansi-term~ doesn't obey:
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (defadvice ansi-term (after advise-ansi-term-coding-system)
+    (set-buffer-process-coding-system 'utf-8-unix 'utf-8-unix))
+  (ad-activate 'ansi-term)
+#+END_SRC
+
+** Utilities
+
+These packages provide various conveniences for editing.
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package evil-surround
+    :ensure t
+    :commands global-evil-surround-mode
+    :config (global-evil-surround-mode 1)
+    :defer 2)
+
+  (use-package smartparens-config
+    :ensure smartparens
+    :diminish smartparens-mode
+    :commands smartparens-global-mode
+    :defer 2
+    :config
+    (progn
+      (smartparens-global-mode t)
+      ;; Smartparens manipulations
+      ;; See all of them here:
+      ;; https://github.com/Fuco1/smartparens/wiki/Working-with-expressions
+      (evil-define-key 'normal emacs-lisp-mode-map
+        (kbd "C-S-k") 'sp-split-sexp
+        (kbd "C-S-j") 'sp-join-sexp
+        (kbd "C-S-l") 'sp-forward-slurp-sexp
+        (kbd "C-S-h") 'sp-backward-slurp-sexp
+        (kbd "C-M-l") 'sp-forward-barf-sexp
+        (kbd "C-M-h") 'sp-backward-barf-sexp)
+
+      ;; Fix handling of {} and [] when hitting RET inside
+      (defun my-sp/pair-on-newline (id action context)
+        "Put trailing pair on newline and return to point."
+        (save-excursion
+          (newline)
+          (indent-according-to-mode)))
+
+      (defun my-sp/pair-on-newline-and-indent (id action context)
+        "Open a new brace or bracket expression, with relevant newlines and indent."
+        (my-sp/pair-on-newline id action context)
+        (indent-according-to-mode))
+
+      (sp-pair "{" nil :post-handlers
+               '(:add ((lambda (id action context)
+                         (my-sp/pair-on-newline-and-indent id action context)) "RET")))
+      (sp-pair "[" nil :post-handlers
+               '(:add ((lambda (id action context)
+                         (my-sp/pair-on-newline-and-indent id action context)) "RET")))))
+#+END_SRC
+
+When proper source control isn't an option, it's useful to be able
+to create a copy of a file as you are working on it.
+~my-write-timestamped-current-file-copy~ writes the contents of the
+active buffer to a copy with a timestamp appended to the filename.
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle no
+  (defun my-write-file-copy (filename)
+    (interactive "F")
+    (save-restriction (widen)
+                      (write-region (point-min) (point-max) filename)))
+
+  (defun my-write-timestamped-file-copy (filename)
+    (interactive "F")
+    (let ((timestamp (format-time-string "%Y%m%d-%H%M%S"))
+          (filename-head (file-name-sans-extension filename))
+          (filename-ext (file-name-extension filename t)))
+      (my-write-file-copy (expand-file-name (concat filename-head "_" timestamp filename-ext)))))
+
+  (defun my-write-timestamped-current-file-copy ()
+    (interactive)
+    (my-write-timestamped-file-copy (buffer-file-name)))
+#+END_SRC
+
+Copying the entire buffer contents to the clipboard is a fairly
+common need when working with other graphical programs.
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (defun my-yank-buffer ()
+    "Copy entire buffer to clipboard."
+    (interactive)
+    (clipboard-kill-ring-save (point-min) (point-max)))
+#+END_SRC
+
+The following function removes the file associated with the current
+buffer from disk. We also define an Evil ex command ~:Remove~ that
+works like that from [[https://github.com/tpope/vim-eunuch][eunuch.vim]].
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (defun my-delete-current-file ()
+    "Delete the file associated with the current buffer and close the
+  buffer. When no file is associated with the buffer, the buffer is
+  closed only."
+    (interactive)
+    (let ((current (buffer-file-name)))
+      (kill-buffer (current-buffer))
+      (when current
+        (delete-file current))))
+
+
+  (with-eval-after-load 'evil
+    (evil-ex-define-cmd "R[emove]" 'my-delete-current-file))
+#+END_SRC
+
+** Scrolling
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq scroll-conservatively 999        ; Never recenter the window on the cursor
+        mouse-wheel-scroll-amount '(1))  ; Slower mouse wheel/trackpad scrolling
+#+END_SRC
+
+** Windows
+
+Resizing windows in Emacs isn't very intuitive. Rather than
+expanding or contracting the current window, it makes more sense to
+conceptualize moving the border between windows, which [[https://github.com/ramnes/move-border][move-border]]
+accomplishes.
+
+#+NAME: evil
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package move-border
+    :commands (move-border-left
+               move-border-right
+               move-border-up
+               move-border-down)
+    :init
+    (progn
+      (define-key evil-normal-state-map (kbd "<left>") 'move-border-left)
+      (define-key evil-normal-state-map (kbd "<right>") 'move-border-right)
+      (define-key evil-normal-state-map (kbd "<up>") 'move-border-up)
+      (define-key evil-normal-state-map (kbd "<down>") 'move-border-down)))
+#+END_SRC
+
+Here we create a mapping to narrow the buffer in an intelligent way
+based on the concept in [[http://endlessparentheses.com/emacs-narrow-or-widen-dwim.html][this post by Artur Malabarba]].
+
+#+NAME: evil
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (defun my-narrow-or-widen (p)
+    "If the buffer is narrowed, it widens. Otherwise, it narrows intelligently.
+  Intelligently means: region, org-src-block, org-subtree, or defun,
+  whichever applies first.
+  Narrowing to org-src-block actually calls `org-edit-src-code'.
+
+  With prefix P, don't widen, just narrow even if buffer is already
+  narrowed."
+    (interactive "P")
+    (declare (interactive-only))
+    (cond ((and (buffer-narrowed-p) (not p))
+           (widen))
+          ((region-active-p)
+           (narrow-to-region (region-beginning) (region-end)))
+          ((and (boundp 'org-src-mode) org-src-mode (not p))
+           (org-edit-src-exit))
+          ((derived-mode-p 'org-mode)
+           (cond ((org-in-src-block-p)
+                  (org-edit-src-code))
+                 ((org-at-block-p)
+                  (org-narrow-to-block))
+                 (t (org-narrow-to-subtree))))
+          (t (narrow-to-defun))))
+#+END_SRC
+
+** Whitespace and Formatting
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq-default indent-tabs-mode nil)
+
+  (defun my-indent-use-tabs ()
+    (setq indent-tabs-mode t))
+  (add-hook 'markdown-mode-hook 'my-indent-use-tabs)
+  (add-hook 'web-mode-hook 'my-indent-use-tabs)
+
+  (use-package dtrt-indent
+    :ensure t
+    :config (dtrt-indent-mode 1))
+#+END_SRC
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq require-final-newline t) ; auto-insert final newlines in all files
+
+  (use-package whitespace
+    :ensure t
+    :commands (whitespace-cleanup
+               whitespace-mode)
+    :config
+    (progn
+      (setq whitespace-line-column nil) ; Use value of fill-column
+      (setq whitespace-style '(face
+                               tabs
+                               spaces
+                               trailing
+                               lines-tail
+                               space-before-tab
+                               newline
+                               indentation
+                               empty
+                               space-after-tab
+                               space-mark
+                               tab-mark
+                               newline-mark))))
+
+  (defun my-indent-buffer ()
+          (interactive)
+          (save-excursion
+                  (indent-region (point-min) (point-max) nil)))
+
+  (defun my-show-trailing-whitespace ()
+          (interactive)
+          (setq show-trailing-whitespace t))
+
+  (add-hook 'prog-mode-hook
+            'my-show-trailing-whitespace)
+#+END_SRC
+
+Auto-filling refers to hard-wrapping text. The default fill-column
+is 80. We adjust this value for specific modes as needed.
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq comment-auto-fill-only-comments t)
+  (add-hook 'text-mode-hook 'turn-on-auto-fill)
+  (add-hook 'prog-mode-hook 'turn-on-auto-fill)
+#+END_SRC
+
+** Spelling
+
+Use aspell for spell checking: =brew install aspell --lang=en=
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle no
+  (use-package flyspell
+    :ensure t
+    :defer 2
+    :init
+    (defun my-flyspell-setup ()
+      "Setup of flyspell-mode."
+      (add-hook 'text-mode-hook 'flyspell-mode)
+      (add-hook 'prog-mode-hook 'flyspell-prog-mode))
+    :config
+    (progn
+      (setq ispell-program-name "aspell")
+      (my-flyspell-setup)))
+#+END_SRC
+
+** Syntax Checking
+
+Use [[https://github.com/flycheck/flycheck][Flycheck]] to validate syntax on the fly.
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package flycheck
+    :ensure t
+    :commands global-flycheck-mode
+    :defer 2
+    :config
+    (progn
+      (global-flycheck-mode 1)
+      (setq-default flycheck-disabled-checkers '(html-tidy emacs-lisp-checkdoc))))
+#+END_SRC
+
+** Version Control and History
+
+Undo tree provides a Vim-like branching undo history that can be
+visualized and traversed in another window.
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package undo-tree
+    :ensure t
+    :diminish undo-tree-mode
+    :config
+    (setq undo-tree-visualizer-diff t
+          undo-tree-visualizer-timestamps t))
+#+END_SRC
+
+Magit provides featureful Git integration.
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package magit
+    :ensure t
+    :commands (magit-status magit-diff magit-log magit-blame-mode)
+    :init
+    (evil-leader/set-key
+      "g s" 'magit-status
+      "g b" 'magit-blame-mode
+      "g l" 'magit-log
+      "g d" 'magit-diff
+      "g r" 'vc-revert)
+    :config
+    (progn
+      (evil-make-overriding-map magit-mode-map 'emacs)
+      (define-key magit-mode-map "\C-w" 'evil-window-map)
+      (evil-define-key 'emacs magit-mode-map "j" 'magit-goto-next-section)
+      (evil-define-key 'emacs magit-mode-map "k" 'magit-goto-previous-section)
+      (evil-define-key 'emacs magit-mode-map "K" 'magit-discard-item))) ; k
+#+END_SRC
+
+[[https://github.com/syohex/emacs-git-gutter-fringe][git-gutter-fringe]] shows the version control status of lines in the
+fringe. There are at least four different implementations out
+there. Some use the window margin (and conflict with linum-mode), some
+use the fringe (and don't work in a terminal).
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package git-gutter-fringe
+    :ensure t
+    :diminish git-gutter-mode
+    :config
+    (progn
+      (global-git-gutter-mode t)
+
+      (evil-leader/set-key "g u u" 'global-git-gutter-mode)))
+#+END_SRC
+
+** Languages
+
+*** Emacs-Lisp
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package emacs-lisp-mode
+    :init
+    (progn
+      (evil-leader/set-key-for-mode 'emacs-lisp-mode
+        "m C" 'byte-compile-file
+        "m e" 'eval-defun
+        "m E" 'eval-buffer
+        "m x" 'eval-last-sexp
+        "m X" 'eval-print-last-sexp)
+
+      (use-package eldoc
+        :commands turn-on-eldoc-mode
+        :init (add-hook 'emacs-lisp-mode-hook 'turn-on-eldoc-mode)))
+    :mode ("Cask" . emacs-lisp-mode))
+
+  (defun my-byte-recompile ()
+    "`byte-compile' every .el file under `user-emacs-directory' recursively"
+    (interactive)
+    (byte-recompile-directory user-emacs-directory 0)
+    (when (fboundp 'sauron-add-event)
+      (sauron-add-event 'editor 2 "Byte compiled Emacs directory")))
+
+  (defun my-byte-compile-current-buffer ()
+    "`byte-compile' current buffer in emacs-lisp-mode if compiled file exists."
+    (interactive)
+    (when (and (eq major-mode 'emacs-lisp-mode)
+               (file-exists-p (byte-compile-dest-file buffer-file-name)))
+      (byte-compile-file buffer-file-name)
+      (when (fboundp 'sauron-add-event)
+        (sauron-add-event 'editor 2 "Byte compiled buffer"))))
+
+  (add-hook 'after-save-hook 'my-byte-compile-current-buffer)
+#+END_SRC
+
+*** Ledger
+
+Ledger mode is for working with the file format associated with the
+command-line accounting program.
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle no
+  (use-package ledger-mode
+    :ensure t
+    :mode (("\\.ledger\\'" . ledger-mode))
+    :config
+    (progn
+      (setq ledger-post-use-completion-engine :ido)
+      (evil-leader/set-key-for-mode 'ledger-mode
+        "m a" 'ledger-add-transaction
+        "m b" 'ledger-post-edit-amount
+        "m c" 'ledger-toggle-current
+        "m D" 'ledger-delete-current-transaction
+        "m p" 'ledger-display-balance-at-point
+        "m q" 'ledger-post-align-xact
+        "m Q" 'ledger-mode-clean-buffer
+        "m r" 'ledger-report
+        "m R" 'ledger-reconcile
+        "m /" 'my-ledger-post-split-evenly
+        "m ?" 'my-ledger-post-split
+        "m s" 'ledger-display-ledger-stats
+        "m t" 'ledger-insert-effective-date
+        "m y" 'ledger-set-year
+        "m m" 'ledger-set-month)))
+#+END_SRC
+
+These are helper functions I use to manage my ledger file.
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle no
+  (with-eval-after-load 'ledger-mode
+    (defun my-ledger-post-split (account amount)
+      "Split a ledger posting at point between original account and
+  ACCOUNT, with AMOUNT allotted to the second account."
+      (interactive (list (my-ledger-org-read-account)
+                         (string-to-number (read-string "Amount ($): "))))
+      (my-ledger-post-make-split account amount))
+
+    (defun my-ledger-post-split-evenly (account)
+      "Split a ledger posting at point evenly between original account and ACCOUNT."
+      (interactive (list (my-ledger-org-read-account)))
+      (my-ledger-post-make-split account))
+
+    (defun my-ledger-post-make-split (account &optional amount)
+      "Split a ledger posting at point between original account and ACCOUNT."
+      (goto-char (line-beginning-position))
+      (when (re-search-forward ledger-post-line-regexp (line-end-position) t)
+        ;; Go to the end of the account to search forward for an amount
+        (goto-char (match-end ledger-regex-post-line-group-account))
+        (let ((end-of-amount (re-search-forward "[-.,0-9]+" (line-end-position) t)))
+          (if end-of-amount
+              (let* ((val-original (string-to-number (match-string 0)))
+                     (amount (if amount amount
+                               ;; Else split evenly, allowing for a 1-cent remainder
+                               (/ (floor (* 50.0 val-original)) 100.0)))
+                     (val-1 (format "%.2f" (- val-original amount)))
+                     (val-2 (format "%.2f" amount)))
+                (goto-char (match-beginning 0))
+                (delete-region (match-beginning 0) (match-end 0))
+                (insert val-1)
+                (ledger-post-align-postings)
+                (insert "\n    " account "  $" val-2)
+                (ledger-post-align-postings))
+            (message "This posting has no amount"))))))
+#+END_SRC
+
+*** Rest Client
+
+The [[https://github.com/pashky/restclient.el][restclient]] package provides a REPL-like interface for HTTP
+requests. Also there's an [[http://emacsrocks.com/e15.html][Emacs Rocks! episode showing it off]].
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package restclient
+    :ensure t
+    :mode ("\\.http\\'" . restclient-mode)
+    :config
+    (progn
+      (evil-leader/set-key-for-mode 'restclient-mode
+        "m m" 'restclient-http-send-current-stay-in-window
+        "m s" 'restclient-http-send-current-stay-in-window
+        "m S" 'restclient-http-send-current)))
+#+END_SRC
+
+*** Web
+
+Web mode provides, among other features, syntax highlighting for
+Javascript and CSS embedded in HTML as well as highlighting for
+various templating languages.
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package web-mode
+    :ensure t
+    :mode (("\\.html?\\'" . web-mode)
+           ("\\.php\\'" . web-mode)
+           ("\\.css\\'" . web-mode)
+           ("\\.mustache\\'" . web-mode)
+           ("\\.erb\\'" . web-mode))
+    :init
+    (add-hook 'web-mode-hook (lambda ()
+                               (set-fill-column 120))))
+#+END_SRC
+*** Python
+
+Comfy
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package elpy
+    :ensure t
+    :init
+    (elpy-enable))
+#+END_SRC
+** Snippets
+
+Use [[https://github.com/capitaomorte/yasnippet][YASnippet]] for snippets:
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package yasnippet
+    :ensure t
+    :diminish yas-minor-mode
+    :defer 2
+    :config
+    (progn
+      ;; Suppress excessive log messages
+      (setq yas-verbosity 1
+            yas-prompt-functions '(yas-ido-prompt)
+            yas-snippet-dir (expand-file-name "snippets" user-emacs-directory))
+      (yas-global-mode t)))
+#+END_SRC
+
+** Expansion
+
+Use [[http://www.gnu.org/software/emacs/manual/html_node/autotype/Hippie-Expand.html][hippie-expand]] for inline expansion in all modes:
+
+#+NAME: editing
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (global-set-key (kbd "M-/") 'hippie-expand)
+#+END_SRC
+* Navigation and Completion
+
+** Save Place
+
+Place the point where we left it when last visiting the same file.
+
+#+NAME: navigation-completion
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (save-place-mode 1) ; requires emacs 25+
+#+END_SRC
+
+** Ido
+
+#+NAME: navigation-completion
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package ido
+    :config
+    (progn
+      (ido-mode t)
+      (ido-everywhere t)
+
+      (use-package ido-completing-read+
+        :ensure t
+        :config (ido-ubiquitous-mode t)))
+
+      (setq ido-enable-flex-matching t
+            ido-use-virtual-buffers t
+            ido-create-new-buffer 'always) ; Do not prompt when creating new file
+      (add-to-list 'ido-ignore-files "\\.DS_Store")
+
+      (add-hook 'ido-setup-hook 'my-ido-setup)
+
+      (defun my-ido-setup ()
+        "Add Evil-mode-like key bindings for ido."
+        (define-key ido-completion-map (kbd "C-j") 'ido-next-match)
+        (define-key ido-completion-map (kbd "C-k") 'ido-prev-match)
+        (define-key ido-buffer-completion-map (kbd "C-d") 'ido-kill-buffer-at-head) ; Originally C-k
+        (define-key ido-file-completion-map (kbd "C-d") 'ido-delete-file-at-head)
+        (define-key ido-file-completion-map (kbd "C--") 'ido-enter-dired)) ; Originally C-d
+
+      (use-package ido-vertical-mode
+        :ensure t
+        :config
+        (ido-vertical-mode)))
+#+END_SRC
+
+** Smex
+
+Smex provides Ido completion for =M-x=.
+
+#+NAME: navigation-completion
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package smex
+    :ensure t
+    :bind (("M-x" . smex)
+           ("M-X" . smex-major-mode-commands))
+    :config
+    (progn
+      (setq smex-history-length 10)
+      (setq smex-flex-matching t)
+      (smex-initialize)))
+#+END_SRC
+
+** Find in Project
+
+[[https://github.com/bbatsov/projectile][Projectile]] allows easy switching between projects as well as
+finding files and buffers related to the current project, however
+it does not implement its own interface, instead leveraging Ido,
+Helm, or Grizzl.
+
+Projectile's bindings start with =C-c p=.
+
+#+NAME: navigation-completion
+#+BEGIN_SRC emacs-lisp :tangle no
+  (use-package projectile
+    :ensure t
+    :config
+    (progn
+      (setq projectile-show-paths-function 'projectile-hashify-with-relative-paths)
+      (add-to-list 'projectile-globally-ignored-files ".DS_Store") ; FIXME: Only works for file in root
+      (projectile-global-mode)))
+#+END_SRC
+
+** Auto-completion
+
+Used to use [[http://cx4a.org/software/auto-complete/index.html][Auto Complete Mode]] for inline completion in certain major modes:
+
+#+NAME: navigation-completion
+#+BEGIN_SRC emacs-lisp :tangle no
+  (use-package auto-complete-config
+    :ensure auto-complete
+    :diminish auto-complete-mode
+    :commands ac-config-default
+    :defer 2
+    :init
+    (progn
+      ;; The default value of ac-sources is
+      ;; '(ac-source-abbrev ac-source-dictionary ac-source-words-in-same-mode-buffers)
+      ;; and then this is overridden for a handful of major modes.
+      ;;
+      ;; Add a couple of non-default sources to ac-sources for all buffers
+      ;; by redefining this function called from (ac-config-default):
+      (defun ac-common-setup ()
+        (setq ac-sources (append ac-sources '(ac-source-yasnippet
+                                              ac-source-filename))))
+
+      (setq ac-auto-start 1)) ; Number of characters typed before completion starts
+    :config
+    (progn
+      (ac-config-default)
+      (use-package pos-tip
+        :ensure t)
+
+      (add-to-list 'ac-dictionary-directories (expand-file-name "ac-dict" user-emacs-directory))
+      ;; User-defined dictionary goes in "~/.dict" by default.
+
+      (ac-flyspell-workaround)
+      (ac-linum-workaround)))
+#+END_SRC
+
+Now we will use _Company Mode_ for completion & allow it to get info from LSP
+
+#+NAME: navigation-completion
+#+BEGIN_SRC emacs-lisp :tangle no
+  (use-package company
+    :hook (prog-mode . company-mode)
+    :config (setq company-tooltip-align-annotations t)
+            (setq company-minimum-prefix-length 1))
+
+  (use-package company-lsp)
+#+END_SRC
+
+** Key Bindings
+
+Completion of sorts for key sequences is provided by [[https://github.com/kbkbkbkb1/guide-key][guide-key]]:
+
+#+NAME: navigation-completion
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package guide-key
+    :disabled t
+    :ensure t
+    :diminish guide-key-mode
+    :commands guide-key-mode
+    :defer 2
+    :config
+    (progn
+      (setq guide-key/recursive-key-sequence-flag t
+            guide-key/align-command-by-space-flag t
+            guide-key/popup-window-position 'bottom)
+
+      (setq guide-key/highlight-command-regexp
+            '("group:" . guide-key/prefix-command-face))
+
+      ;; Sequences of interest globally
+      (setq guide-key/guide-key-sequence '("SPC"     ; Evil leader key
+                                           "\["
+                                           "\]"
+                                           "g"
+                                           "z"
+                                           "C-h"     ; Help commands
+                                           "C-x r"   ; Register commands
+                                           "C-x 4"   ; Other window commands
+                                           "C-x 5"   ; Other frame commands
+                                           "C-x c"   ; Helm prefix
+                                           "C-c"))   ; Mode commands
+
+      ;; Sequences of interest for specific modes
+      (defun guide-key/my-hook-function-for-org-mode ()
+        (guide-key/add-local-highlight-command-regexp "org-"))
+      (add-hook 'org-mode-hook #'guide-key/my-hook-function-for-org-mode)
+
+      (defun guide-key/my-hook-function-for-markdown-mode ()
+        (guide-key/add-local-highlight-command-regexp "markdown-\\|outline-"))
+      (add-hook 'markdown-mode-hook #'guide-key/my-hook-function-for-markdown-mode)
+
+      (defun guide-key/my-hook-function-for-mail-modes ()
+        (guide-key/add-local-highlight-command-regexp "message-\\|mail-\\|mml-"))
+      (add-hook 'mu4e-compose-mode-hook #'guide-key/my-hook-function-for-mail-modes)
+      (add-hook 'mu4e-headers-mode-hook #'guide-key/my-hook-function-for-mail-modes)
+      (add-hook 'mu4e-view-mode-hook #'guide-key/my-hook-function-for-mail-modes)
+
+      (guide-key-mode 1)))
+#+END_SRC
+* Org
+
+** Org Files
+
+| contacts.org | Database of contacts; provides completion for email addresses  |
+| diary.org    | Date-based notes; where events and daily notes are logged      |
+| food.org     | Cooking recipes and notes on restaurants                       |
+| inbox.org    | Where new, unfiled tasks and notes are collected               |
+| routine.org  | Where recurring tasks are stored                               |
+
+** Basic Settings
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package org
+    :ensure org-plus-contrib
+    :config
+    (progn
+      (use-package evil-org
+        :diminish evil-org-mode)
+      (use-package org-mac-link
+        :commands org-mac-grab-link)
+
+      ;; Track habits
+      (add-to-list 'org-modules 'org-habit)
+      (use-package org-habit
+        :config
+        (setq org-habit-show-habits-only-for-today t
+              org-habit-show-done-always-green t))
+
+      (setq org-directory "~/org"
+            org-default-notes-file (expand-file-name "inbox.org" org-directory))
+      (use-package org-tempo)
+      (use-package org-contacts
+        :config
+        (setq org-contacts-files `(,(expand-file-name "contacts.org" org-directory))
+              org-contacts-icon-use-gravatar nil))
+
+      (defun my-ledger-org-read-date ()
+        "Read date in an Org mode capture template in the format that
+  Ledger expects. Includes a custom prompt string."
+        (let ((org-read-date-prefer-future nil))
+          (replace-regexp-in-string "-" "/"
+                                    (org-read-date nil nil nil "Transaction"))))
+
+      (defun my-ledger-org-read-account ()
+        "Read account name using `ido-completing-read'"
+        (ido-completing-read "Account: "
+                             (split-string
+                              (with-output-to-string
+                                (shell-command "ledger --permissive accounts" standard-output))
+                              "\n" t)))
+
+      (defun my-ledger-org-read-payee ()
+        "Read payee name using `ido-completing-read'"
+        (ido-completing-read "Payee: "
+                             (split-string
+                              (with-output-to-string
+                                (shell-command "ledger --permissive payees" standard-output))
+                              "\n" t)))
+
+      (setq org-capture-templates
+            '(("t" "☑️ To-do" entry
+               (file+headline "" "Tasks")
+               "* TODO %?\nSCHEDULED: %t"
+               :clock-keep t :kill-buffer t)
+              ("n" "📔 Note" entry
+               (file+headline "" "Notes")
+               "* Note taken on %U\n%?"
+               :clock-keep t :kill-buffer t :jump-to-captured t)
+              ("j" "📆 Journal entry" entry
+               (file+olp+datetree "diary.org")
+               "* %?\n%U\n"
+               :time-prompt t :clock-keep t :kill-buffer t)
+              ("e" "🗓️ Calendar event" entry
+               (file+olp+datetree "diary.org")
+               "* %^{Event name}%^{Location}p\n%T\n%?"
+               :time-prompt t :clock-keep t :kill-buffer t)
+              ("f" "🛫️ Flight" entry
+               (file+olp+datetree "diary.org")
+               "* %^{From} ✈ %^{To}  :flight:\n%T\n%?"
+               :time-prompt t :clock-keep t :kill-buffer t)
+              ("p" "📓 Phrase" entry
+               (file+headline "vocabulary.org" "Phrases")
+               "* %?"
+               :clock-keep t :kill-buffer t :jump-to-captured t)
+              ("c" "👤 Contact" entry
+               (file+headline "contacts.org" "People")
+               "* %(org-contacts-template-name)\n:PROPERTIES:\n:EMAIL: %(org-contacts-template-email)\n:END:"
+               :clock-keep t :kill-buffer t)
+              ("r" "🍲 Recipe" entry
+               (file+headline "food.org" "Recipes")
+               "* %^{Recipe Name}%^{source}p%^{serves}p%^{time}p\n\n** Ingredients\n\n** Preparation"
+               :clock-keep t :empty-lines 1 :kill-buffer t)
+              ("R" "🍴 Restaurant" entry
+               (file+headline "food.org" "Restaurants")
+               "* %^{Restaurant Name}\n%u\n"
+               :clock-keep t :empty-lines 1 :kill-buffer t)
+              ("k" "🔠 Keyboards" entry
+               (file+headline "keyboards.org" "Keyboard Gallery")
+               "* %^{Title}%^{source}p\n#+CAPTION: %^{Caption text}\n%?"
+               :clock-keep t :jump-to-captured t)))
+
+      (setq org-goto-interface 'outline-path-completion
+            org-log-done 'time
+            org-log-into-drawer t
+            org-treat-S-cursor-todo-selection-as-state-change nil ; Cycle through TODO states with S-Left/Right skipping logging
+            org-deadline-warning-days 1
+            org-refile-targets '((org-agenda-files :maxlevel . 2))
+            org-refile-target-verify-function 'my-verify-refile-target
+            org-refile-allow-creating-parent-nodes 'confirm
+            org-refile-use-outline-path t
+            org-outline-path-complete-in-steps nil
+            org-completion-use-ido t
+            org-indirect-buffer-display 'current-window
+            org-return-follows-link t
+            org-catch-invisible-edits 'show-and-error)
+
+      (setq org-todo-keywords '((sequence
+                                 "TODO(t)"
+                                 "FOCUS(f)"
+                                 "STARTED(s!)"
+                                 "WAITING(w@/!)"
+                                 "|"
+                                 "CANCELED(c@)"
+                                 "DONE(d!)"
+                                 )))
+
+      (defun my-verify-refile-target ()
+        "Exclude TODO keywords with a done state from refile targets"
+        (not (member (nth 2 (org-heading-components)) org-done-keywords)))
+
+      (setq org-startup-indented t)
+
+      (use-package ob-restclient
+        :ensure t)
+
+      ;; Code blocks
+      (org-babel-do-load-languages
+       'org-babel-load-languages
+       '((emacs-lisp . t)
+         (ledger . t)
+         (restclient . t)
+         (ruby . t)
+         (python . t)
+         (shell . t)))
+      (setq org-src-fontify-natively t
+            org-edit-src-content-indentation 0
+            org-src-tab-acts-natively t
+            org-confirm-babel-evaluate nil)))
+#+END_SRC
+
+Evil confirm/abort in capture buffers.
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (with-eval-after-load 'org-capture
+    (define-key org-capture-mode-map [remap evil-save-and-close]          'org-capture-finalize)
+    (define-key org-capture-mode-map [remap evil-save-modified-and-close] 'org-capture-finalize)
+    (define-key org-capture-mode-map [remap evil-quit]                    'org-capture-kill))
+#+END_SRC
+
+** Lists
+
+[[https://github.com/calvinwyoung/org-autolist][org-autolist]] provides automatic list continuation on =RET=. This does
+not presently work with Evil's =o= and =O=.
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package org-autolist
+    :ensure t
+    :diminish org-autolist-mode
+    :commands org-autolist-mode
+    :init
+    (progn
+      (add-hook 'org-mode-hook #'org-autolist-mode)))
+#+END_SRC
+
+** Templates
+
+Org mode provides a mechanism for inserting [[http://orgmode.org/manual/Easy-Templates.html][templates]] into Org
+documents. To insert a structural element, type a =<=, followed by a
+template selector and =<TAB>=.
+
+** Tags
+
+Org headlines can be tagged such that they are easier to find and
+filter. Here we set up reusable tags with mnemonic shortcuts.
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq org-tag-alist '((:startgroup)
+                        ("@work" . ?W)     ; Contexts
+                        ("@home" . ?H)
+                        ("@school" . ?S)
+                        ("@errand" . ?E)
+                        (:endgroup)
+                        ("build" . ?b)     ; Task types
+                        ("earn" . ?e)
+                        ("learn" . ?l)
+                        ("focus" . ?f)     ; Task statuses
+                        ("someday" . ?s)
+                        ("delegate" . ?d)))
+#+END_SRC
+
+** Exporting
+
+These settings control how Org files are exported to other formats. In
+particular, we specify HTML5 instead of the default XHTML for HTML
+export and clean up some of the generated markup. A [[file:~/.emacs.d/emacs.org][custom style sheet]]
+for exported files lives in the =~/.emacs.d= directory.
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq org-hide-emphasis-markers t
+        org-export-with-section-numbers nil
+        org-export-with-tags 'not-in-toc
+        org-export-with-toc 1
+        org-export-backends '(html
+                              latex
+                              md
+                              icalendar)
+        org-html-htmlize-output-type nil
+        org-html-doctype "html5"
+        org-html-preamble nil
+        org-html-postamble t
+        org-html-postamble-format '(("en" "<time>%T</time>"))
+        org-html-head-include-default-style nil
+        org-html-head-include-scripts nil
+        org-html-head nil
+        org-html-text-markup-alist '((bold . "<strong>%s</strong>")
+                                     (code . "<code>%s</code>")
+                                     (italic . "<em>%s</em>")
+                                     (strike-through . "<del>%s</del>")
+                                     (underline . "<dfn>%s</dfn>") ; Somewhat arbitrary
+                                     (verbatim . "<kbd>%s</kbd>")))
+#+END_SRC
+
+[[http://orgmode.org/manual/Project-alist.html#Project-alist][Projects]] are predefined rules for exporting files or groups of
+files. This Org document is part of the "emacs" project. You can
+publish a project by issuing =M-x org-publish-current-project RET= or
+=M-x org-publish RET= and then typing the project name at the prompt, or
+you can publish all projects by issuing =M-x org-publish-all RET=.
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle no
+  (setq org-publish-project-alist
+        '(("org-assets"
+           :base-directory "~/org/"
+           :recursive t
+           :base-extension "jpg"
+           :publishing-directory "~/Notes/"
+           :publishing-function org-publish-attachment)
+          ("org-pages"
+           :base-directory "~/org/"
+           :recursive t
+           :base-extension "org"
+           :publishing-directory "~/Notes/"
+           :publishing-function org-html-publish-to-html)
+          ("org" :components ("org-assets" "org-pages"))
+          ("ledger-assets"
+           :base-directory "~/.emacs.d/"
+           :recursive nil
+           :base-extension "css\\|js"
+           :publishing-directory "~/ledger/reports/"
+           :publishing-function org-publish-attachment)
+          ("ledger-reports"
+           :base-directory "~/ledger/reports/"
+           :recursive nil
+           :base-extension "org"
+           :publishing-directory "~/ledger/reports/"
+           :publishing-function org-html-publish-to-html
+           :headline-levels 9)
+          ("ledger" :components ("ledger-assets" "ledger-reports"))))
+#+END_SRC
+
+PDF output
+
+Space out table of contents by default
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle yes
+(setq org-latex-toc-command "\\pagebreak \\tableofcontents \\clearpage")
+#+END_SRC
+
+** Key Bindings
+
+*** Hierarchy
+
+| Binding        | Function                                     |
+|----------------+----------------------------------------------|
+| =M-<left/right>= | Promote/demote current headline or list item |
+| =M-<enter>=      | Create new item at current level             |
+| =M-S-<enter>=    | Create new TODO at current level             |
+
+*** To-Dos
+
+| Binding       | Function                                       |
+|---------------+------------------------------------------------|
+| =C-c C-t=     | Cycle state                                    |
+| =C-c C-s=     | Schedule it                                    |
+| =C-c C-d=     | Set deadline                                   |
+| =C-c <comma>= | Set priority                                   |
+| =S-<up/down>= | Increase/decrease priority of current headline |
+| =C-c C-c=     | Toggle checkbox state                          |
+| =C-u C-c C-c= | Toggle checkbox presence                       |
+
+*** Links
+
+| Binding | Function                    |
+|---------+-----------------------------|
+| =C-c C-l= | Insert link or edit current |
+
+*** Dates and Times
+
+| Binding               | Function                                              |
+|-----------------------+-------------------------------------------------------|
+| =C-c .=                 | Insert timestamp (use twice to insert range)          |
+| =C-c !=                 | Insert inactive timestamp (doesn't appear in agendas) |
+| =C-u C-c .= / =C-u C-c != | Like above but including time                         |
+| =S-<left/right>=        | Increment/decrement by day                            |
+| =S-<up/down>=           | Increment/decrement segment at cursor                 |
+| =C-c C-y=               | Evaluate time range and insert after range text       |
+
+*** Tags
+
+| Binding | Function       |
+|---------+----------------|
+| =C-c C-q= | Tag a headline |
+
+*** Archiving
+
+| Binding         | Function                                                |
+|-----------------+---------------------------------------------------------|
+| =C-c C-x C-a=     | Archive current item                                    |
+| =C-u C-c C-x C-s= | Prompt to archive each non-TODO subtree of current item |
+
+*** Clocking tasks
+
+| Binding                   | Function                                                      |
+|---------------------------+---------------------------------------------------------------|
+| =C-c C-x C-i= / =C-c C-x C-o= | Clock in/clock out                                            |
+| =C-u C-c C-x C-i=           | Select from list of recently clocked tasks                    |
+| =C-u C-u C-c C-x C-i=       | Clock into the task at point and mark it as the default task  |
+| =C-u C-u C-u C-c C-x C-i=   | Start clock at point at time last clock stopped               |
+| =C-c C-x C-x=               | Clock in last clocked task                                    |
+| =C-u C-c C-x C-x=           | As above, but select from recently clocked tasks              |
+| =C-u C-u C-c C-x C-x=       | As above, but start clock at time last clock stopped          |
+| =C-S-<up/down>=             | On ~CLOCK~ log lines, shift both timestamps preserving duration |
+| =C-c C-x C-q=               | Cancel current clock                                          |
+| =C-c C-x C-j=               | Jump to currently clocked in item                             |
+
+Note: The clock is automatically stopped on tasks when you mark them as DONE.
+
+*** Source Code
+
+| Binding            | Function                              |
+|--------------------+---------------------------------------|
+| =C-c <single-quote>= | Edit current ~SRC~ block in native mode |
+
+*** Customizations
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle yes
+  ;; Org mode - http://orgmode.org/guide/Activation.html#Activation
+  (evil-leader/set-key
+    "a"   'org-agenda
+    "c"   'org-capture
+    "r b" 'org-iswitchb
+    "r c" 'my-open-org-calendar
+    "r l" 'org-store-link)
+
+  (evil-leader/set-key-for-mode 'org-mode
+    "m A" 'org-archive-subtree-default
+    "m a" 'org-archive-subtree-default-with-confirmation
+    "m d" 'org-deadline
+    "m e" 'org-export-dispatch
+    "m g" 'org-goto
+    "m m" 'org-ctrl-c-ctrl-c
+    "m P" 'org-set-property-and-value
+    "m p" 'org-set-property
+    "m q" 'org-set-tags-command
+    "m r" 'org-refile
+    "m s" 'org-schedule
+    "m t" 'org-todo)
+
+  (with-eval-after-load 'org-agenda
+    ;; Use the standard Org agenda bindings as a base
+    (evil-make-overriding-map org-agenda-mode-map 'emacs t)
+    (evil-define-key 'emacs org-agenda-mode-map "j" 'org-agenda-next-line)
+    (evil-define-key 'emacs org-agenda-mode-map "k" 'org-agenda-previous-line)
+    (evil-define-key 'emacs org-agenda-mode-map (kbd "C-j") 'org-agenda-goto-date) ; "j"
+    (evil-define-key 'emacs org-agenda-mode-map "n" 'org-agenda-capture))          ; "k"
+
+  ;; Enable word wrap in org-mode
+  (add-hook 'org-mode-hook #'(lambda ()
+                               (toggle-word-wrap)
+                               (visual-line-mode)))
+#+END_SRC
+
+** Clocking Time
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package org-clock
+    :config
+    (progn
+      (setq org-clock-persist t
+            ;; Do not prompt to resume an active clock
+            ;org-clock-persist-query-resume nil
+            ;; Resume clocking task on clock-in if the clock line is open
+            org-clock-in-resume t
+            org-clock-in-switch-to-state "STARTED"
+            org-clock-out-remove-zero-time-clocks t
+            org-clock-out-when-done t
+            org-clock-idle-time 20
+            ;; Include current clocking task in clock reports
+            org-clock-report-include-clocking-task t)
+
+      ;; Resume clocking tasks when emacs is restarted
+      (org-clock-persistence-insinuate)))
+#+END_SRC
+
+** Agenda
+
+*** Basic Configuration
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package org-agenda
+    :commands (org-agenda org-agenda-list)
+    :config
+    (setq org-agenda-files `(,org-directory)
+          org-agenda-skip-unavailable-files t
+          org-agenda-skip-deadline-if-done nil
+          org-agenda-skip-scheduled-if-done nil
+          org-agenda-restore-windows-after-quit t
+          org-agenda-window-setup 'current-window
+          org-agenda-show-all-dates t
+          org-agenda-show-log t
+          org-agenda-diary-file (expand-file-name "diary.org" org-directory)
+          org-agenda-include-diary t))
+#+END_SRC
+
+*** Holidays
+
+Turn off holidays I don't need.
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (setq holiday-bahai-holidays nil
+        holiday-islamic-holidays nil
+        holiday-oriental-holidays nil)
+#+END_SRC
+
+*** Custom Agenda Commands
+
+Below are our custom agenda commands:
+
+| Key | Description                                   |
+|-----+-----------------------------------------------|
+| =d=   | Timeline for today, including a clock summary |
+| =w=   | Items with status WAITING                     |
+| =f=   | Important tasks that I might tend to avoid    |
+| =p=   | Items by priority                             |
+| =l=   | Scheduled ledger transactions by date         |
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle no
+  (with-eval-after-load 'org-agenda
+    (setq org-agenda-custom-commands
+          '(("d" "🕑 Timeline for today"
+             agenda ""
+             ((org-agenda-ndays 1)
+              (org-agenda-show-log t)
+              (org-agenda-log-mode-items '(clock closed))
+              (org-agenda-clockreport-mode t)
+              (org-agenda-entry-types '())))
+            ("w" "✋ Waiting for"
+             todo "WAITING"
+             ((org-agenda-sorting-strategy '(priority-down))))
+            ("f" "🎯 Focused tasks"
+             todo "FOCUS"
+             ((org-agenda-sorting-strategy '(priority-down))))
+            ("p" "❗ By priority"
+             ((tags-todo "+PRIORITY=\"A\"")
+              (tags-todo "+PRIORITY=\"B\"")
+              (tags-todo "+PRIORITY=\"\"")
+              (tags-todo "+PRIORITY=\"C\""))
+             ((org-agenda-prefix-format "%-10c %-10T %e ")
+              (org-agenda-sorting-strategy '(priority-down
+                                             tag-up
+                                             category-keep
+                                             effort-down))))
+            ("l" "📒 Scheduled transactions"
+             agenda "transaction"
+             ((org-agenda-time-grid nil)
+              (org-agenda-ndays 90)
+              (org-agenda-include-diary nil)
+              (org-agenda-show-all-dates nil)
+              (org-agenda-remove-tags t)
+              (org-agenda-repeating-timestamp-show-all nil)
+              (org-deadline-warning-days 365)
+              (org-agenda-filter-preset '("+transaction"))
+              (org-agenda-entry-types '(:deadline)))))))
+#+END_SRC
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle no
+  ;; Thanks to http://doc.norang.ca/org-mode.html
+  (defun my-skip-non-archivable-tasks ()
+    "Skip trees that are not available for archiving"
+    (save-restriction
+      (widen)
+      ;; Consider only tasks with done todo headings as archivable candidates
+      (let ((next-headline (save-excursion (or (outline-next-heading) (point-max))))
+            (subtree-end (save-excursion (org-end-of-subtree t))))
+        (if (member (org-get-todo-state) org-todo-keywords-1)
+            (if (member (org-get-todo-state) org-done-keywords)
+                (let* ((daynr (string-to-int (format-time-string "%d" (current-time))))
+                       (a-month-ago (* 60 60 24 (+ daynr 1)))
+                       (last-month (format-time-string "%Y-%m-" (time-subtract (current-time) (seconds-to-time a-month-ago))))
+                       (this-month (format-time-string "%Y-%m-" (current-time)))
+                       (subtree-is-current (save-excursion
+                                             (forward-line 1)
+                                             (and (< (point) subtree-end)
+                                                  (re-search-forward (concat last-month "\\|" this-month) subtree-end t)))))
+                  (if subtree-is-current
+                      subtree-end ; Has a date in this month or last month, skip it
+                    nil))  ; available to archive
+              (or subtree-end (point-max)))
+          next-headline))))
+#+END_SRC
+
+** Appointments
+
+Use the =appt= package for displaying appointment alerts. The
+following was derived from [[http://lists.gnu.org/archive/html/emacs-orgmode/2013-02/msg00644.html][this message]] on the Org mode mailing
+list.
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle no
+  (use-package appt
+    :config
+    (progn
+      (run-at-time "24:01" 3600 'org-agenda-to-appt)           ; Update appt list hourly
+      (add-hook 'org-finalize-agenda-hook 'org-agenda-to-appt) ; Update appt list on agenda view
+
+      (setq appt-message-warning-time '60) ; Send first warning 30 minutes before appointment
+      (setq appt-display-interval '30)     ; Warn every 15 minutes from appt-message-warning-time
+      (appt-activate 1)))                  ; Activate appointment notification
+#+END_SRC
+
+** Mobile
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle no
+  (use-package org-mobile
+    :disabled t
+    :config
+    (progn
+      ;; Set to the name of the file where new notes will be stored
+      (setq org-mobile-inbox-for-pull (expand-file-name "mobile-flagged.org" org-directory)
+            org-mobile-directory "~/Dropbox/Apps/MobileOrg"
+            org-mobile-agendas '("a")
+            org-mobile-force-id-on-agenda-items nil
+            ;; org-mobile-encryption-password is set in private.el
+            org-mobile-use-encryption t)
+
+      (defvar my-org-mobile-sync-timer nil)
+      (defvar my-org-mobile-sync-secs (* 60 45))
+
+      (defun my-org-mobile-sync-pull-and-push ()
+        (org-mobile-pull)
+        (org-mobile-push)
+        (when (fboundp 'sauron-add-event)
+          (sauron-add-event 'org-mobile 2 "Finished MobileOrg sync")))
+
+      (defun my-org-mobile-sync-start ()
+        "Start automated `org-mobile-push'"
+        (interactive)
+        (setq my-org-mobile-sync-timer
+              (run-with-idle-timer my-org-mobile-sync-secs t
+                                   'my-org-mobile-sync-pull-and-push)))
+
+      (defun my-org-mobile-sync-stop ()
+        "Stop automated `org-mobile-push'"
+        (interactive)
+        (cancel-timer my-org-mobile-sync-timer))
+
+      (add-hook 'after-init-hook 'my-org-mobile-sync-start)
+      (add-hook 'kill-emacs-hook 'org-mobile-push)))
+#+END_SRC
+
+** External Capture
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle no
+  (defun my-org-capture-todo (note)
+    (let* ((org-file org-default-notes-file)
+           (type 'entry)
+           (headline nil)
+           (template (concat "** " note
+                             "\n   SCHEDULED: %t\n")))
+      (my-org-capture-entry org-file headline template)))
+
+  (defun my-org-capture-note (note)
+    (let* ((org-file org-default-notes-file)
+           (type 'entry)
+           (headline nil)
+           (template (concat "** %U " note "\n")))
+      (my-org-capture-entry org-file headline template)))
+
+  (defun my-org-capture-entry (org-file headline template)
+    (let* ((type 'entry)
+           (org-capture-entry
+            (if (headline)
+                `(entry
+                  (file+headline ,org-file ,headline)
+                  ,template :clock-keep t :immediate-finish t)
+                `(entry
+                  (file ,org-file)
+                  ,template :clock-keep t :immediate-finish t))))
+      (require 'org-capture)
+      (my-org-capture-noninteractively)))
+
+  ;; See http://stackoverflow.com/questions/22411626/generate-org-mode-objects-programmatically
+  (defun my-org-capture-noninteractively ()
+    (let* ((orig-buf (current-buffer))
+           (annotation (if (and (boundp 'org-capture-link-is-already-stored)
+                                org-capture-link-is-already-stored)
+                           (plist-get org-store-link-plist :annotation)
+                         (ignore-errors (org-store-link nil))))
+           (entry org-capture-entry)
+           initial)
+      (setq initial (or org-capture-initial
+                        (and (org-region-active-p)
+                             (buffer-substring (point) (mark)))))
+      (when (stringp initial)
+        (remove-text-properties 0 (length initial) '(read-only t) initial))
+      (when (stringp annotation)
+        (remove-text-properties 0 (length annotation)
+                                '(read-only t) annotation))
+      (setq org-capture-plist (copy-sequence (nthcdr 3 entry)))
+      (org-capture-put :target (nth 1 entry))
+      (let ((txt (nth 2 entry)) (type (or (nth 0 entry) 'entry)))
+        (when (or (not txt) (and (stringp txt) (not (string-match "\\S-" txt))))
+          (cond
+           ((eq type 'item) (setq txt "- %?"))
+           ((eq type 'checkitem) (setq txt "- [ ] %?"))
+           ((eq type 'table-line) (setq txt "| %? |"))
+           ((member type '(nil entry)) (setq txt "* %?\n  %a"))))
+        (org-capture-put :template txt :type type))
+      (org-capture-get-template)
+      (org-capture-put :original-buffer orig-buf
+                       :original-file (or (buffer-file-name orig-buf)
+                                          (and (featurep 'dired)
+                                               (car (rassq orig-buf
+                                                           dired-buffers))))
+                       :original-file-nondirectory
+                       (and (buffer-file-name orig-buf)
+                            (file-name-nondirectory
+                             (buffer-file-name orig-buf)))
+                       :annotation annotation
+                       :initial initial
+                       :return-to-wconf (current-window-configuration)
+                       :default-time
+                       (or org-overriding-default-time
+                           (org-current-time)))
+      (org-capture-set-target-location)
+      (condition-case error
+          (org-capture-put :template (org-capture-fill-template))
+        ((error quit)
+         (if (get-buffer "*Capture*") (kill-buffer "*Capture*"))
+         (error "Capture abort: %s" error)))
+      (setq org-capture-clock-keep (org-capture-get :clock-keep))
+      (condition-case error
+          (org-capture-place-template
+           (equal (car (org-capture-get :target)) 'function))
+        ((error quit)
+         (if (and (buffer-base-buffer (current-buffer))
+                  (string-match "\\`CAPTURE-" (buffer-name)))
+             (kill-buffer (current-buffer)))
+         (set-window-configuration (org-capture-get :return-to-wconf))
+         (error "Error.")))
+      (if (and (derived-mode-p 'org-mode)
+               (org-capture-get :clock-in))
+          (condition-case nil
+              (progn
+                (if (org-clock-is-active)
+                    (org-capture-put :interrupted-clock
+                                     (copy-marker org-clock-marker)))
+                (org-clock-in)
+                (org-set-local 'org-capture-clock-was-started t))
+            (error
+             "Could not start the clock in this capture buffer")))
+      (if (org-capture-get :immediate-finish)
+          (org-capture-finalize))))
+#+END_SRC
+ 
+** Calendar
+
+The [[https://github.com/kiwanami/emacs-calfw][Calfw]] package provides a graphical calendar representation of the
+Org agenda (as well as other calendar formats).
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle yes
+  (use-package calfw
+    :ensure t
+    :config
+    (setq cfw:fchar-junction ?╋
+          cfw:fchar-vertical-line ?┃
+          cfw:fchar-horizontal-line ?━
+          cfw:fchar-left-junction ?┣
+          cfw:fchar-right-junction ?┫
+          cfw:fchar-top-junction ?┳
+          cfw:fchar-top-left-corner ?┏
+          cfw:fchar-top-right-corner ?┓))
+
+  (use-package calfw-org
+    :ensure t)
+
+  (defun my-open-org-calendar ()
+    "Open an org schedule calendar in a new buffer.
+
+  This function is adapted from cfw:open-org-calendar."
+    (interactive)
+    (save-excursion
+      (let* ((source1 (cfw:org-create-source "SkyBlue"))
+             (cp (cfw:create-calendar-component-buffer
+                  :view 'month
+                  :contents-sources (list source1)
+                  :custom-map cfw:org-schedule-map
+                  :sorter 'cfw:org-schedule-sorter)))
+        (switch-to-buffer (cfw:cp-get-buffer cp)))))
+#+END_SRC
+
+** Invoicing
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle no
+  (defvar invoice-dir "~/Documents/Invoices/")
+  (defvar invoice-template-path (expand-file-name "_template.org" invoice-dir))
+
+  (defun my-invoice-next-number ()
+    "Get next sequential invoice number. Invoice numbers are in the format YYYYXXX,
+  where YYYY is the current year and XXX is a zero-padded sequential counter
+  modulo 1000. Ex.: 2016001."
+    (concat (format-time-string "%Y" (current-time))
+            (format "%03d" (% (1+ (string-to-number
+                                (substring (car (last (directory-files
+                                        invoice-dir
+                                        nil
+                                        "^[0-9]+\.org$"))) 4 7))) 1000))))
+
+  (defun my-invoice-get-path (number)
+    "Derive invoice file path from invoice NUMBER."
+    (format "%s/%s.org" invoice-dir number))
+
+  (defun my-invoice-create (scope-file)
+    "Make a new invoice from given file and date range."
+    (interactive "forg file: ")
+    (let ((invoice-number (my-invoice-next-number))
+          (invoice-date (format-time-string "%m/%d/%Y" (current-time)))
+          (invoice-start (org-read-date nil t nil "Choose invoice start" nil "-2Mon"))
+          (invoice-end (org-read-date nil nil nil "Choose invoice end" nil "-Sun")))
+      (find-file (my-invoice-get-path invoice-number))
+      (insert-file-contents invoice-template-path)
+      (goto-char (point-min))
+      (while (search-forward "@INVOICE_NUMBER@" nil t)
+        (replace-match invoice-number))
+      (goto-char (point-min))
+      (while (search-forward "@SCOPE_FILE@" nil t)
+        (replace-match scope-file))
+      (org-update-all-dblocks)))
+
+  (defun my-invoice-create-from-current-buffer-file ()
+    "Make a new invoice from current buffer's file and given date range."
+    (interactive)
+    (my-invoice-create (buffer-file-name)))
+#+END_SRC
+
+** Org-ref
+*** Basic Configuration
+
+#+NAME: org
+#+BEGIN_SRC emacs-lisp :tangle yes
+(use-package org-ref
+  :ensure t)
+(use-package org-ref-pdf)
+(use-package org-ref-url-utils)
+#+END_SRC

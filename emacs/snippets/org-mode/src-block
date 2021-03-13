@@ -1,0 +1,8 @@
+# -*- mode: snippet; require-final-newline: nil -*-
+# name: src-block
+# key: src
+# --
+#+NAME: ${1:init-before}
+#+BEGIN_SRC ${2:emacs-lisp} :tangle no
+$0
+#+END_SRC
