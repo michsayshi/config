@@ -1030,8 +1030,19 @@ Comfy
     :init
     (elpy-enable))
 #+END_SRC
+*** Haskell
+Add a haskell mode
+#+NAME: haskell
+#+BEGIN_SRC emacs-lisp :tangle yes
+(use-package haskell-mode
+  :ensure t
+  :mode "\\.hs\\'")
+(use-package hindent
+  :ensure t)
+(org-babel-do-load-languages
+ 'org-babel-load-languages '((haskell . t)))
+#+END_SRC
 ** Snippets
-
 Use [[https://github.com/capitaomorte/yasnippet][YASnippet]] for snippets:
 
 #+NAME: editing

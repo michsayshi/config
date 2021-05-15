@@ -515,6 +515,14 @@ narrowed."
   :init
   (elpy-enable))
 
+(use-package haskell-mode
+  :ensure t
+  :mode "\\.hs\\'")
+(use-package hindent
+  :ensure t)
+(org-babel-do-load-languages
+ 'org-babel-load-languages '((haskell . t)))
+
 (use-package yasnippet
   :ensure t
   :diminish yas-minor-mode

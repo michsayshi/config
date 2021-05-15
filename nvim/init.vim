@@ -2,6 +2,7 @@
 call plug#begin('~/.config/nvim/plugged')
 
 " Languages
+Plug 'nvim-treesitter/nvim-treesitter', {'do': ':TSUpdate'}
 Plug 'sheerun/vim-polyglot'
 Plug 'rust-lang/rust.vim'
 Plug 'lervag/vimtex'
@@ -14,6 +15,8 @@ Plug 'justinmk/vim-sneak'
 Plug 'easymotion/vim-easymotion'
 Plug 'ctrlpvim/ctrlp.vim'
 Plug 'neomake/neomake'
+Plug 'tpope/vim-obsession'
+Plug 'Raimondi/delimitMate'
 Plug 'fatih/molokai'
     augroup localneomake " run on buffer save
         autocmd! BufWritePost * Neomake
@@ -27,10 +30,10 @@ call plug#end()
 
 " General options {{{
 set nocompatible
-set ts=2
-set tabstop=2
-set shiftwidth=2
-set softtabstop=2
+set ts=4
+set tabstop=4
+set shiftwidth=4
+set softtabstop=4
 set expandtab
 set encoding=utf-8
 set enc=utf-8
@@ -49,6 +52,7 @@ set ofu=syntaxcomplete#Complete
 set virtualedit=block,onemore
 set splitbelow
 set splitright
+set mouse=a
 au VimResized * :wincmd = " Resize splits when the window is resized
 autocmd BufEnter,FocusGained * checktime " Refresh current buffer if file changed
 let g:vim_json_syntax_conceal = 0 "Disabling concealing json syntax by default
@@ -97,6 +101,28 @@ nmap <silent> gd <Plug>(coc-definition)
 nmap <silent> gy <Plug>(coc-type-definition)
 nmap <silent> gi <Plug>(coc-implementation)
 nmap <silent> gr <Plug>(coc-references)
+
+"" Treesitter
+lua <<EOF
+require'nvim-treesitter.configs'.setup {
+    ensure_installed = {"bash", "c", "cpp", "css", "html", "javascript", "json", "go", "lua", "python", "rust", "tsx", "typescript", "vue", "yaml"},
+    highlight = {
+        enable = true,
+    },
+    incremental_selection = {
+        enable = true,
+        keymaps = {
+            init_selection = "gnn",
+            node_incremental = "grn",
+            scope_incremental = "grc",
+            node_decremental = "grm",
+        },
+    },
+    indent = {
+        enable = true
+    },
+}
+EOF
 
 "" Go
 " general
